@@ -11,6 +11,15 @@ linters:
     - staticcheck
     - ineffassign
     - errcheck
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*text/tabwriter.Writer).Flush
 
 formatters:
   enable:
