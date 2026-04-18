@@ -15,7 +15,6 @@ import (
 )
 
 var (
-	pairClient string
 	pairConfig string
 	pairServer string
 )
@@ -36,19 +35,19 @@ var pairCmd = &cobra.Command{
 	Use:   "pair <code>",
 	Short: "Pair a client by exchanging a one-time code for a permanent credential",
 	Long: `Exchange a 6-character pairing code (generated in the rememberize web UI)
-for a permanent API key, and write the appropriate client config file.
+for a permanent API key. Which local config file (if any) is written is
+decided server-side from the pairing code's stored client hint:
 
-Supported clients:
-  claude-code  — writes ./.mcp.json entry
-  cursor       — writes Cursor's MCP config
-  generic      — prints the key and server URL, no file write`,
+  claude-code  — writes ./.mcp.json
+  cursor       — writes ~/.cursor/mcp.json
+  cli          — writes only the CLI's own ~/.rememberize/config.toml
+  generic      — prints an MCP config block to stdout`,
 	Args: cobra.ExactArgs(1),
 	RunE: runPair,
 }
 
 func init() {
-	pairCmd.Flags().StringVar(&pairClient, "client", "", "client type (claude-code, cursor, generic); autodetects if empty")
-	pairCmd.Flags().StringVar(&pairConfig, "config", "", "override default config path")
+	pairCmd.Flags().StringVar(&pairConfig, "config", "", "override default config path for the written MCP file")
 	pairCmd.Flags().StringVar(&pairServer, "server", "", "override server URL (defaults to config)")
 }
 
@@ -80,17 +79,16 @@ func runPair(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Build client_name from hostname if we can
+	// F7+F9: send the hostname as a discrete field and mark client_name
+	// with the "@auto" sentinel. The server composes the display name from
+	// its stored client_hint ("Claude Code", "Cursor", "CLI", ...) + this
+	// hostname, and includes a config_target in the response telling us
+	// which local config file (if any) to write.
 	hostname, _ := os.Hostname()
-	clientName := ""
-	if hostname != "" {
-		clientName = fmt.Sprintf("%s (%s)", clientTypeOrHint(), hostname)
-	}
-
-	// POST to /api/pair/exchange
 	body, _ := json.Marshal(map[string]string{
 		"code":        code,
-		"client_name": clientName,
+		"client_name": "@auto",
+		"hostname":    hostname,
 	})
 	resp, err := http.Post(server+"/api/pair/exchange", "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -107,8 +105,9 @@ func runPair(cmd *cobra.Command, args []string) error {
 		APIKey     string `json:"api_key"`
 		ServerURL  string `json:"server_url"`
 		Connection struct {
-			Name string `json:"name"`
-			Type string `json:"type"`
+			Name         string `json:"name"`
+			Type         string `json:"type"`
+			ConfigTarget string `json:"config_target"`
 		} `json:"connection"`
 		Namespaces []struct {
 			Name string `json:"name"`
@@ -129,13 +128,15 @@ func runPair(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Determine client type and write config
-	client := pairClient
-	if client == "" {
-		client = detectClient()
+	// F7+F9: dispatch by the server-returned config_target. The server
+	// knows, from the pairing code's stored client_hint, which integration
+	// the user was targeting — trust it instead of re-sniffing cwd.
+	target := result.Connection.ConfigTarget
+	if target == "" {
+		target = "generic"
 	}
 
-	switch client {
+	switch target {
 	case "claude-code":
 		path := pairConfig
 		if path == "" {
@@ -144,9 +145,8 @@ func runPair(cmd *cobra.Command, args []string) error {
 		if err := writeMCPConfig(path, result.APIKey, result.ServerURL); err != nil {
 			return fmt.Errorf("write mcp config: %w", err)
 		}
-		fmt.Printf("Paired claude-code -> %s\n", result.ServerURL)
-		fmt.Printf("  Config written: %s\n", path)
-		fmt.Printf("  Connection:     %s\n", result.Connection.Name)
+		fmt.Fprintf(pairStdout, "Paired as %s -> %s\n", result.Connection.Name, result.ServerURL)
+		fmt.Fprintf(pairStdout, "  Config written: %s\n", path)
 	case "cursor":
 		path := pairConfig
 		if path == "" {
@@ -155,13 +155,17 @@ func runPair(cmd *cobra.Command, args []string) error {
 		if err := writeMCPConfig(path, result.APIKey, result.ServerURL); err != nil {
 			return fmt.Errorf("write cursor config: %w", err)
 		}
-		fmt.Printf("Paired cursor -> %s\n", result.ServerURL)
-		fmt.Printf("  Config written: %s\n", path)
-	default: // generic
-		fmt.Printf("Paired -> %s\n", result.ServerURL)
-		fmt.Printf("\n  REMEMBERIZE_API_KEY=%s\n", result.APIKey)
-		fmt.Printf("  REMEMBERIZE_SERVER=%s\n\n", result.ServerURL)
-		fmt.Println("  Use Authorization: Bearer <key> in REST requests.")
+		fmt.Fprintf(pairStdout, "Paired as %s -> %s\n", result.Connection.Name, result.ServerURL)
+		fmt.Fprintf(pairStdout, "  Config written: %s\n", path)
+	case "cli":
+		// The CLI's own config gets the API key below (F12); no MCP file.
+		fmt.Fprintf(pairStdout, "Paired as %s -> %s\n", result.Connection.Name, result.ServerURL)
+	default: // "generic"
+		// Print the MCP config block so the user can paste it anywhere.
+		fmt.Fprintf(pairStdout, "Paired as %s -> %s\n", result.Connection.Name, result.ServerURL)
+		fmt.Fprintln(pairStdout, "\nNo known integration — paste this into your MCP client:")
+		fmt.Fprintf(pairStdout, "{\n  \"mcpServers\": {\n    \"rememberize\": {\n      \"type\": \"http\",\n      \"url\": %q,\n      \"headers\": { \"Authorization\": \"Bearer %s\" }\n    }\n  }\n}\n",
+			strings.TrimRight(result.ServerURL, "/")+"/mcp", result.APIKey)
 	}
 
 	return nil
@@ -208,29 +212,6 @@ func promptForServerURL(in io.Reader, out io.Writer) (string, error) {
 		}
 		return "", fmt.Errorf("invalid choice: %q (expected 1, 2, 3, or a URL)", choice)
 	}
-}
-
-// clientTypeOrHint returns a short label for the client being paired.
-// Used in the client_name string sent with the exchange request.
-func clientTypeOrHint() string {
-	if pairClient != "" {
-		return pairClient
-	}
-	detected := detectClient()
-	if detected != "" {
-		return detected
-	}
-	return "client"
-}
-
-// detectClient inspects the current directory for hints about which client
-// is being paired. Returns "claude-code" if .mcp.json exists; otherwise
-// falls back to "generic".
-func detectClient() string {
-	if _, err := os.Stat(".mcp.json"); err == nil {
-		return "claude-code"
-	}
-	return "generic"
 }
 
 // cursorConfigPath returns the platform-appropriate Cursor MCP config path.
