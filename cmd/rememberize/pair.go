@@ -128,6 +128,17 @@ func runPair(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// F12: always persist the API key to the CLI's own config first, before
+	// any MCP-file write or namespace prompt. Losing power mid-prompt used
+	// to mean the user had no key anywhere and had to re-pair; now the key
+	// survives whatever happens after this point.
+	if result.APIKey != "" {
+		_ = setConfigValue(cfg, "auth.api_key", result.APIKey)
+		if err := saveConfig(cfg); err != nil {
+			return fmt.Errorf("save api key: %w", err)
+		}
+	}
+
 	// F7+F9: dispatch by the server-returned config_target. The server
 	// knows, from the pairing code's stored client_hint, which integration
 	// the user was targeting — trust it instead of re-sniffing cwd.
