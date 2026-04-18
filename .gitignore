@@ -1,0 +1,23 @@
+# Go build output
+/rememberize
+/rememberize.exe
+/dist/
+/bin/
+
+# Go coverage / profiling
+*.out
+*.test
+*.prof
+coverage.html
+
+# User-facing config (tests should never leak into repo)
+.rememberize/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
