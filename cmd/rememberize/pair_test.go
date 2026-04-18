@@ -82,7 +82,9 @@ func TestWriteMCPConfig_MergesExistingFile(t *testing.T) {
 
 	data, _ := os.ReadFile(path)
 	var cfg map[string]any
-	json.Unmarshal(data, &cfg)
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("unmarshal written config: %v", err)
+	}
 
 	servers := cfg["mcpServers"].(map[string]any)
 	if _, ok := servers["other-server"]; !ok {

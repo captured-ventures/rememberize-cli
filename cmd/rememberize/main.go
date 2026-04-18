@@ -644,14 +644,22 @@ func runImport(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("create form file: %w", err)
 	}
-	part.Write(data)
+	if _, err := part.Write(data); err != nil {
+		return fmt.Errorf("write form part: %w", err)
+	}
 	if importNamespace != "" {
-		writer.WriteField("namespace", importNamespace)
+		if err := writer.WriteField("namespace", importNamespace); err != nil {
+			return fmt.Errorf("write namespace field: %w", err)
+		}
 	}
 	if importFormat != "" {
-		writer.WriteField("format", importFormat)
+		if err := writer.WriteField("format", importFormat); err != nil {
+			return fmt.Errorf("write format field: %w", err)
+		}
 	}
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("close multipart writer: %w", err)
+	}
 
 	req, err := client.newRequest("POST", "/api/import", body)
 	if err != nil {
@@ -741,7 +749,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("Exported to %s\n", exportOutput)
 	} else {
-		os.Stdout.Write(data)
+		_, _ = os.Stdout.Write(data)
 	}
 	return nil
 }

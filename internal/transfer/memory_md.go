@@ -172,11 +172,11 @@ func (f *MemoryMDFormatter) Format(memories []Memory) ([]byte, error) {
 			sb.WriteString("\n")
 		}
 		sb.WriteString("---\n")
-		sb.WriteString(fmt.Sprintf("name: %s\n", truncate(m.Content, 60)))
+		fmt.Fprintf(&sb, "name: %s\n", truncate(m.Content, 60))
 		if m.Metadata != nil {
-			sb.WriteString(fmt.Sprintf("description: %s\n", *m.Metadata))
+			fmt.Fprintf(&sb, "description: %s\n", *m.Metadata)
 		}
-		sb.WriteString(fmt.Sprintf("type: %s\n", m.Type))
+		fmt.Fprintf(&sb, "type: %s\n", m.Type)
 		sb.WriteString("---\n\n")
 		sb.WriteString(m.Content)
 		sb.WriteString("\n")

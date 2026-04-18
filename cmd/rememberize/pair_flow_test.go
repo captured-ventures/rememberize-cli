@@ -35,10 +35,10 @@ type recordedRequest struct {
 }
 
 type exchangeResponse struct {
-	APIKey     string                    `json:"api_key"`
-	ServerURL  string                    `json:"server_url"`
-	Connection exchangeRespConnection    `json:"connection"`
-	Namespaces []exchangeRespNamespace   `json:"namespaces"`
+	APIKey     string                  `json:"api_key"`
+	ServerURL  string                  `json:"server_url"`
+	Connection exchangeRespConnection  `json:"connection"`
+	Namespaces []exchangeRespNamespace `json:"namespaces"`
 }
 
 type exchangeRespConnection struct {
