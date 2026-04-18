@@ -42,10 +42,14 @@ func configPath() string {
 }
 
 // defaultConfig returns a Config with sensible defaults.
+//
+// APIURL intentionally defaults to empty. A stale "http://localhost:8080"
+// default made fresh installs silently target nothing; the CLI now prompts
+// on the first pair (F4) and persists the resolved URL before continuing.
 func defaultConfig() *Config {
 	return &Config{
 		Auth: AuthConfig{
-			APIURL: "http://localhost:8080",
+			APIURL: "",
 			APIKey: "",
 		},
 		Defaults: DefaultsConfig{

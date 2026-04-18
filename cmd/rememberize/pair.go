@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,18 @@ var (
 	pairClient string
 	pairConfig string
 	pairServer string
+)
+
+// pairStdin is the reader prompts read from. Swappable so tests can
+// feed canned input without touching os.Stdin.
+var pairStdin io.Reader = os.Stdin
+
+// pairStdout is the writer prompt text goes to. Swappable for tests.
+var pairStdout io.Writer = os.Stdout
+
+const (
+	productionServerURL = "https://platform.rememberize.app"
+	localDevServerURL   = "http://localhost:8080"
 )
 
 var pairCmd = &cobra.Command{
@@ -42,15 +55,29 @@ func init() {
 func runPair(cmd *cobra.Command, args []string) error {
 	code := strings.ToUpper(strings.TrimSpace(args[0]))
 
+	cfg := loadConfig()
+
+	// F4: Resolve the server URL.
+	//   1. --server flag
+	//   2. config auth.api_url (if non-empty)
+	//   3. interactive prompt — persisted before we proceed so a mid-flow
+	//      Ctrl-C doesn't strand the user with nothing on retry.
 	server := pairServer
-	if server == "" {
-		cfg := loadConfig()
-		if cfg != nil && cfg.Auth.APIURL != "" {
-			server = cfg.Auth.APIURL
-		}
+	if server == "" && cfg.Auth.APIURL != "" {
+		server = cfg.Auth.APIURL
 	}
 	if server == "" {
-		server = "https://rememberize.app"
+		chosen, err := promptForServerURL(pairStdin, pairStdout)
+		if err != nil {
+			return err
+		}
+		server = chosen
+		if err := setConfigValue(cfg, "auth.api_url", server); err != nil {
+			return fmt.Errorf("stash server url: %w", err)
+		}
+		if err := saveConfig(cfg); err != nil {
+			return fmt.Errorf("save config: %w", err)
+		}
 	}
 
 	// Build client_name from hostname if we can
@@ -91,6 +118,17 @@ func runPair(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parse response: %w", err)
 	}
 
+	// F4: always persist the server-returned canonical URL. Covers the case
+	// where the user typed a URL that redirected (X-Forwarded-Proto, custom
+	// domain) — from here on, CLI talks to whatever the server told us is
+	// the real origin.
+	if result.ServerURL != "" && result.ServerURL != cfg.Auth.APIURL {
+		_ = setConfigValue(cfg, "auth.api_url", result.ServerURL)
+		if err := saveConfig(cfg); err != nil {
+			return fmt.Errorf("save server url: %w", err)
+		}
+	}
+
 	// Determine client type and write config
 	client := pairClient
 	if client == "" {
@@ -127,6 +165,49 @@ func runPair(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// promptForServerURL asks the user which server to pair against and
+// returns the resolved URL. Default on empty input is the production
+// platform. Choice "3" (or any non-1/2) prompts for a custom URL.
+func promptForServerURL(in io.Reader, out io.Writer) (string, error) {
+	fmt.Fprintln(out, "No server configured. Pair against:")
+	fmt.Fprintln(out, "  1. platform.rememberize.app  (production, recommended)")
+	fmt.Fprintln(out, "  2. http://localhost:8080      (local dev)")
+	fmt.Fprintln(out, "  3. Other (enter URL)")
+	fmt.Fprint(out, "Choice [1]: ")
+
+	reader := bufio.NewReader(in)
+	choice, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("read choice: %w", err)
+	}
+	choice = strings.TrimSpace(choice)
+
+	switch choice {
+	case "", "1":
+		return productionServerURL, nil
+	case "2":
+		return localDevServerURL, nil
+	case "3":
+		fmt.Fprint(out, "Server URL: ")
+		raw, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return "", fmt.Errorf("read server url: %w", err)
+		}
+		url := strings.TrimSpace(raw)
+		if url == "" {
+			return "", fmt.Errorf("server URL required")
+		}
+		return url, nil
+	default:
+		// Treat any other input as a pasted URL (common shortcut when the
+		// user has the URL on their clipboard and skips the menu).
+		if strings.Contains(choice, "://") {
+			return choice, nil
+		}
+		return "", fmt.Errorf("invalid choice: %q (expected 1, 2, 3, or a URL)", choice)
+	}
 }
 
 // clientTypeOrHint returns a short label for the client being paired.
