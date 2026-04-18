@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "rememberize": {
+      "type": "http",
+      "url": "https://platform.rememberize.app/mcp",
+      "headers": {
+        "Authorization": "Bearer ${REMEMBERIZE_API_KEY}"
+      }
+    }
+  }
+}
