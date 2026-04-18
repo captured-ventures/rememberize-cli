@@ -16,6 +16,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version is the CLI version string. Defaults to "dev" for local builds;
+// release builds inject the tag via -ldflags "-X main.version=v0.1.0".
+var version = "dev"
+
 // Global flags
 var jsonOutput bool
 
@@ -33,6 +37,7 @@ var rootCmd = &cobra.Command{
 	Use:           "rememberize",
 	Short:         "CLI client for the rememberize memory system",
 	Long:          "A portable, multi-directional memory system for AI.\nManage memories, search, and configure connections from the command line.",
+	Version:       version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
