@@ -18,6 +18,10 @@ coverage.html
 .vscode/
 *.swp
 
+# Claude Code — local overrides only (committed settings.json is shared)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
 # OS
 .DS_Store
 Thumbs.db
