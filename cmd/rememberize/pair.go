@@ -179,7 +179,55 @@ func runPair(cmd *cobra.Command, args []string) error {
 			strings.TrimRight(result.ServerURL, "/")+"/mcp", result.APIKey)
 	}
 
+	// F6: offer to set a default namespace. Names are collected from the
+	// exchange response so the user doesn't have to type them. Invalid or
+	// empty input is a silent skip — this is opt-in, not a gate.
+	if len(result.Namespaces) > 0 {
+		names := make([]string, len(result.Namespaces))
+		for i, ns := range result.Namespaces {
+			names[i] = ns.Name
+		}
+		if picked := promptForDefaultNamespace(pairStdin, pairStdout, names); picked != "" {
+			_ = setConfigValue(cfg, "defaults.namespace", picked)
+			if err := saveConfig(cfg); err != nil {
+				return fmt.Errorf("save default namespace: %w", err)
+			}
+			fmt.Fprintf(pairStdout, "Default namespace set to %q.\n", picked)
+		}
+	}
+
 	return nil
+}
+
+// promptForDefaultNamespace lists the user's namespaces and asks which
+// (if any) to use as the CLI's default. Returns the chosen name, or ""
+// if the user skipped or gave invalid input.
+func promptForDefaultNamespace(in io.Reader, out io.Writer, names []string) string {
+	fmt.Fprintln(out, "\nAvailable namespaces:")
+	for i, name := range names {
+		fmt.Fprintf(out, "  %d. %s\n", i+1, name)
+	}
+	fmt.Fprintf(out, "Set default namespace? [1-%d / enter to skip]: ", len(names))
+
+	reader := bufio.NewReader(in)
+	raw, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return ""
+	}
+	choice := strings.TrimSpace(raw)
+	if choice == "" {
+		return ""
+	}
+	// Accept either a 1-based index or the literal namespace name.
+	for i, name := range names {
+		if choice == name {
+			return name
+		}
+		if choice == fmt.Sprintf("%d", i+1) {
+			return name
+		}
+	}
+	return ""
 }
 
 // promptForServerURL asks the user which server to pair against and
