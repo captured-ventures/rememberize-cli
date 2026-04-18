@@ -1,0 +1,16 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - ineffassign
+    - errcheck
+    - gofmt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
