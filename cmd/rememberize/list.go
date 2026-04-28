@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
@@ -46,17 +45,17 @@ func runList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAMESPACE\tTYPE\tCONTENT\tCREATED")
+	headers := []string{"ID", "NAMESPACE", "TYPE", "CONTENT", "CREATED"}
+	rows := make([][]string, 0, len(memories))
 	for _, m := range memories {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+		rows = append(rows, []string{
 			m.ID,
 			m.Namespace,
 			m.Type,
 			truncate(m.Content, 60),
 			m.CreatedAt,
-		)
+		})
 	}
-	w.Flush()
+	renderTable(os.Stdout, headers, rows)
 	return nil
 }

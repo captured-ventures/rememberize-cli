@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
@@ -100,12 +99,12 @@ func runKeysList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tTYPE\tPERMISSIONS\tCREATED")
+	headers := []string{"ID", "NAME", "TYPE", "PERMISSIONS", "CREATED"}
+	rows := make([][]string, 0, len(result.Keys))
 	for _, k := range result.Keys {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", k.ID, k.Name, k.Type, k.Permissions, k.CreatedAt)
+		rows = append(rows, []string{k.ID, k.Name, k.Type, k.Permissions, k.CreatedAt})
 	}
-	w.Flush()
+	renderTable(os.Stdout, headers, rows)
 	return nil
 }
 

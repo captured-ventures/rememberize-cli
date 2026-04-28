@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
@@ -31,11 +30,11 @@ func runNamespaces(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tDESCRIPTION\tCREATED")
+	headers := []string{"NAME", "DESCRIPTION", "CREATED"}
+	rows := make([][]string, 0, len(namespaces))
 	for _, ns := range namespaces {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", ns.Name, ns.Description, ns.CreatedAt)
+		rows = append(rows, []string{ns.Name, ns.Description, ns.CreatedAt})
 	}
-	w.Flush()
+	renderTable(os.Stdout, headers, rows)
 	return nil
 }

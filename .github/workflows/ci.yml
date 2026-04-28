@@ -27,7 +27,7 @@ jobs:
           - os: macos-latest
             runner: macos-latest
           - os: windows-latest
-            runner: blacksmith-4vcpu-windows-2025
+            runner: blacksmith-2vcpu-windows-2025
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout

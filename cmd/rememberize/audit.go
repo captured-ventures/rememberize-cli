@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
@@ -43,17 +42,15 @@ func runAudit(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tACTION\tCONNECTION\tMEMORY\tCREATED")
+	headers := []string{"ID", "ACTION", "CONNECTION", "MEMORY", "CREATED"}
+	rows := make([][]string, 0, len(entries))
 	for _, e := range entries {
 		memID := "-"
 		if e.MemoryID != nil {
 			memID = *e.MemoryID
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			e.ID, e.Action, e.ConnectionID, memID, e.CreatedAt,
-		)
+		rows = append(rows, []string{e.ID, e.Action, e.ConnectionID, memID, e.CreatedAt})
 	}
-	w.Flush()
+	renderTable(os.Stdout, headers, rows)
 	return nil
 }

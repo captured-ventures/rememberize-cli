@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
@@ -31,17 +30,15 @@ func runConnections(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tNAME\tTYPE\tACTIVE\tLAST SEEN\tCREATED")
+	headers := []string{"ID", "NAME", "TYPE", "ACTIVE", "LAST SEEN", "CREATED"}
+	rows := make([][]string, 0, len(connections))
 	for _, c := range connections {
 		active := "no"
 		if c.IsActive {
 			active = "yes"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			c.ID, c.Name, c.Type, active, c.LastSeen, c.CreatedAt,
-		)
+		rows = append(rows, []string{c.ID, c.Name, c.Type, active, c.LastSeen, c.CreatedAt})
 	}
-	w.Flush()
+	renderTable(os.Stdout, headers, rows)
 	return nil
 }
