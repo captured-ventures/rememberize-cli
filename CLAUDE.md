@@ -113,6 +113,18 @@ What you DO still need to check (the bootstrap bit us): **`multipart.Writer.Writ
 
 The OTK exchange response includes `connection.name` and `connection.config_target` — **trust those fields.** Use `connection.name` for display, use `connection.config_target` to decide which config file the client writes (claude-code → `.mcp.json`, cursor → `~/.cursor/mcp.json`, cli → no MCP config, generic → print to stdout). Don't resurrect the cwd-sniffing `detectClient()` that used to live here; it was the whole point of F7+F9.
 
+**A user-visible signal that the sentinel path didn't fire:** if a freshly-paired connection appears in the dashboard literally named `@auto` AND the CLI prints "No known integration — paste this into your MCP client", the server you hit is on a pre-`server-composed-name` build (i.e., older than `ironystock/rememberize` PR #45). The CLI is doing the right thing; the server didn't translate the sentinel. Surface it to Brad as a deploy issue, not a CLI bug.
+
+### F24 — preflight before clobbering an existing MCP config
+
+`runPair` now prompts before merging into an existing `.mcp.json` / Cursor config: "Found existing X — add rememberize MCP entry here? [Y/n]". On `n`, it falls through to the `generic` branch and prints a paste-able config block instead of writing the file.
+
+**Why this exists:** the dogfooding scenario was Brad pairing from inside a project repo that had a tracked `.mcp.json`, getting the new entry merged into it silently, and only seeing "Config written: .mcp.json" *after* the fact. The preflight is the user's chance to back out cleanly — say, by Ctrl-C-ing and `cd`-ing somewhere harmless first.
+
+**Don't strip this prompt.** It's interactive in the same way the namespace-default prompt is, and tests in `pair_flow_test.go` (`TestPair_F24_*`) pin its behavior. If you need a non-interactive path for CI/scripts, add a `--yes` flag — don't remove the prompt.
+
+**Skip rule:** prompt only fires when the target file *exists with non-zero size*. A missing or empty file is the green-field case and proceeds without prompting.
+
 ### Two-repo discipline
 
 You cannot import `github.com/ironystock/rememberize/...` — that's the private server repo. If you find yourself reaching for it, you're about to duplicate logic (acceptable, local copies are fine) or design a protocol change (not acceptable here — file a `[MAIN-REPO]` issue and @-mention Brad).
@@ -129,6 +141,12 @@ If you open this repo alongside the private rememberize main repo (`D:\new-proje
 - `RELEASE_PAT` secret is what lets the release workflow push formula/manifest updates to the sibling `homebrew-rememberize` + `scoop-rememberize` repos. `GITHUB_TOKEN` alone can't do cross-repo pushes.
 - Homebrew tap uses the `brews:` goreleaser block (deprecation notice on `brews:` → `homebrew_casks:` exists; we stayed on `brews:` because it still works and `casks` is for GUI apps).
 - Windows builds skip `arm64` (goreleaser `ignore: windows/arm64` + `install.sh` errors cleanly on that combo). Add it if demand arrives.
+
+### Don't trust runbooks blindly — re-check against current dashboard
+
+The cross-repo provisioning runbooks (e.g. `~/.claude/plans/rememberize-cli-agent-bootstrap.md`) drift fast because the dashboard ships frequently. Examples seen during dogfooding: the runbook's "Step 2 — name the connection" referred to a wizard step that was deleted when the server-composed-name path landed; "click + New namespace" referred to a button that was hardcoded `disabled` for several weeks.
+
+**Rule:** before walking a user through a multi-step provisioning plan, spot-check the steps against the current dashboard templates in `cmd/web/*.templ` (or live UI). If they disagree, the dashboard wins — file a friction note, then either update the runbook or pause until the gap is fixed. Don't assume the runbook is current just because it was right last time.
 
 ### Misc
 

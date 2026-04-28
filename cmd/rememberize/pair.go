@@ -147,6 +147,27 @@ func runPair(cmd *cobra.Command, args []string) error {
 		target = "generic"
 	}
 
+	// F24: if we're about to merge into an existing config file, ask
+	// before doing it. The dogfooding scenario: user runs pair from the
+	// wrong cwd (e.g. inside a project repo with a tracked .mcp.json),
+	// the silent merge surprises them after the fact. On decline, fall
+	// through to the "generic" branch so the user still gets a paste-able
+	// block on stdout instead of a half-applied write.
+	if target == "claude-code" || target == "cursor" {
+		path := pairConfig
+		if path == "" {
+			if target == "claude-code" {
+				path = ".mcp.json"
+			} else {
+				path = cursorConfigPath()
+			}
+		}
+		if fileHasContent(path) && !confirmFileMerge(pairStdin, pairStdout, path) {
+			fmt.Fprintf(pairStdout, "Skipped %s — falling back to printable config.\n", path)
+			target = "generic"
+		}
+	}
+
 	switch target {
 	case "claude-code":
 		path := pairConfig
@@ -197,6 +218,37 @@ func runPair(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// fileHasContent reports whether path exists and is non-empty. A
+// missing file or zero-byte file returns false — those cases don't
+// warrant a preflight prompt because there's nothing to surprise the
+// user with.
+func fileHasContent(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir() && info.Size() > 0
+}
+
+// confirmFileMerge prompts the user to confirm merging a rememberize
+// MCP entry into an existing file at path. Default on empty input is
+// "yes" (the common case is the user IS in the right cwd). Returns
+// false only on an explicit "n" / "no".
+func confirmFileMerge(in io.Reader, out io.Writer, path string) bool {
+	fmt.Fprintf(out, "Found existing %s — add rememberize MCP entry here? [Y/n]: ", path)
+	reader := bufio.NewReader(in)
+	raw, err := reader.ReadString('\n')
+	if err != nil && err != io.EOF {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "n", "no":
+		return false
+	default:
+		return true
+	}
 }
 
 // promptForDefaultNamespace lists the user's namespaces and asks which
