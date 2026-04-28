@@ -29,7 +29,10 @@ func init() {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 
 	memories, err := client.ListMemories(listNamespace, listType, listLimit, listOffset)
 	if err != nil {

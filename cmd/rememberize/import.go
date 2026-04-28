@@ -69,7 +69,10 @@ func runImport(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	part, err := writer.CreateFormFile("file", filename)

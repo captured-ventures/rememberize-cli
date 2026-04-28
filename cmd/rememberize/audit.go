@@ -26,7 +26,10 @@ func init() {
 }
 
 func runAudit(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 
 	entries, err := client.ListAudit(auditLimit, auditAction, auditConnectionID)
 	if err != nil {

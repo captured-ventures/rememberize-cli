@@ -37,7 +37,10 @@ func runRm(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 	if err := client.DeleteMemory(id); err != nil {
 		return err
 	}

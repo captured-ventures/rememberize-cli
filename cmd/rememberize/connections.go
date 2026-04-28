@@ -14,7 +14,10 @@ var connectionsCmd = &cobra.Command{
 }
 
 func runConnections(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 
 	connections, err := client.ListConnections()
 	if err != nil {

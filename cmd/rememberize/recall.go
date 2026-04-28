@@ -27,7 +27,10 @@ func init() {
 }
 
 func runRecall(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 	query := strings.Join(args, " ")
 
 	results, err := client.SearchMemories(query, recallNamespace, "", recallLimit, true)

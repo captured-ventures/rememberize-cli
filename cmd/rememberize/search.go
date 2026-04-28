@@ -29,7 +29,10 @@ func init() {
 }
 
 func runSearch(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 	query := strings.Join(args, " ")
 
 	results, err := client.SearchMemories(query, searchNamespace, searchType, searchLimit, false)

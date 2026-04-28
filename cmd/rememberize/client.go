@@ -31,14 +31,31 @@ type Client struct {
 	HTTP    *http.Client
 }
 
-// NewClient creates a Client from the loaded config.
-func NewClient() *Client {
-	cfg := loadConfig()
+// NewClient creates a Client from the loaded config. Errors if either
+// the API key or server URL is missing — callers expect to make
+// authenticated API calls and a naked request would either get rejected
+// by the server (best case) or, worse, hit an unauthenticated endpoint
+// the server didn't mean to expose. Pre-flighting on the CLI side
+// surfaces the misconfiguration before the network call.
+func NewClient() (*Client, error) {
+	return newClientFromConfig(loadConfig())
+}
+
+// newClientFromConfig is the testable seam: takes a *Config explicitly
+// instead of calling loadConfig(), so unit tests can construct edge
+// cases without touching ~/.rememberize/config.toml.
+func newClientFromConfig(cfg *Config) (*Client, error) {
+	if cfg.Auth.APIKey == "" {
+		return nil, fmt.Errorf("no API key configured. Run 'rememberize pair <code>' to authenticate — get a code from https://rememberize.app/app/connections/new — or set REMEMBERIZE_API_KEY=<key> for scripted use")
+	}
+	if cfg.Auth.APIURL == "" {
+		return nil, fmt.Errorf("no server URL configured. Run 'rememberize pair <code>' to authenticate, or 'rememberize config set auth.api_url https://platform.rememberize.app', or set REMEMBERIZE_API_URL=<url> for scripted use")
+	}
 	return &Client{
 		BaseURL: cfg.Auth.APIURL,
 		APIKey:  cfg.Auth.APIKey,
 		HTTP:    &http.Client{Timeout: 30 * time.Second},
-	}
+	}, nil
 }
 
 // ---------------------------------------------------------------------------
