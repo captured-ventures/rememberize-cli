@@ -31,6 +31,10 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "output raw JSON (for scripting/piping)")
+	rootCmd.PersistentFlags().CountVarP(&verboseCount, "verbose", "v", "increase log verbosity (-v info, -vv debug)")
+	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "suppress all logs except errors")
+
+	cobra.OnInitialize(configureLogger)
 
 	rootCmd.AddCommand(addCmd)
 	rootCmd.AddCommand(recallCmd)

@@ -140,11 +140,14 @@ func (c *Client) do(method, path string, body interface{}) ([]byte, int, error) 
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
 	}
 
+	logger.Debug("http request", "method", method, "url", u)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
+		logger.Debug("http request failed", "method", method, "url", u, "err", err)
 		return nil, 0, fmt.Errorf("request %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
+	logger.Debug("http response", "method", method, "url", u, "status", resp.StatusCode)
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
