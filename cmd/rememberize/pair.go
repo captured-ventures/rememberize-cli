@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 )
 
@@ -233,10 +234,34 @@ func fileHasContent(path string) bool {
 }
 
 // confirmFileMerge prompts the user to confirm merging a rememberize
-// MCP entry into an existing file at path. Default on empty input is
-// "yes" (the common case is the user IS in the right cwd). Returns
-// false only on an explicit "n" / "no".
+// MCP entry into an existing file at path. TTY callers get a styled
+// huh.Confirm; non-TTY callers (tests, CI, piped scripts) fall through
+// to the legacy bufio prompt so the existing pair_flow_test.go contract
+// holds. Default on empty input is "yes" (common case: user IS in the
+// right cwd). Returns false only on an explicit decline.
 func confirmFileMerge(in io.Reader, out io.Writer, path string) bool {
+	if !isTTY(out) {
+		return confirmFileMergeLegacy(in, out, path)
+	}
+	confirm := true
+	err := huh.NewConfirm().
+		Title(fmt.Sprintf("Found existing %s", path)).
+		Description("Add rememberize MCP entry here?").
+		Affirmative("Yes, merge").
+		Negative("No, skip").
+		Value(&confirm).
+		Run()
+	if err != nil {
+		// Fail-safe: if huh blew up, preserve the legacy default of "yes"
+		// (matches the bufio-EOF fallback below).
+		return true
+	}
+	return confirm
+}
+
+// confirmFileMergeLegacy is the original bufio-based prompt. Kept
+// exactly as it was so non-TTY tests + scripted use are unchanged.
+func confirmFileMergeLegacy(in io.Reader, out io.Writer, path string) bool {
 	fmt.Fprintf(out, "Found existing %s — add rememberize MCP entry here? [Y/n]: ", path)
 	reader := bufio.NewReader(in)
 	raw, err := reader.ReadString('\n')
@@ -252,9 +277,35 @@ func confirmFileMerge(in io.Reader, out io.Writer, path string) bool {
 }
 
 // promptForDefaultNamespace lists the user's namespaces and asks which
-// (if any) to use as the CLI's default. Returns the chosen name, or ""
-// if the user skipped or gave invalid input.
+// (if any) to use as the CLI's default. TTY callers get a styled
+// huh.Select with a "skip" option. Non-TTY callers fall through to the
+// legacy numeric-index prompt. Returns the chosen name, or "" if the
+// user skipped (or gave invalid input on the legacy path).
 func promptForDefaultNamespace(in io.Reader, out io.Writer, names []string) string {
+	if !isTTY(out) {
+		return promptForDefaultNamespaceLegacy(in, out, names)
+	}
+	options := make([]huh.Option[string], 0, len(names)+1)
+	options = append(options, huh.NewOption("(skip — don't set a default)", ""))
+	for _, name := range names {
+		options = append(options, huh.NewOption(name, name))
+	}
+	var choice string
+	err := huh.NewSelect[string]().
+		Title("Set default namespace").
+		Description("Used by 'rememberize add' and other commands when --ns is unset").
+		Options(options...).
+		Value(&choice).
+		Run()
+	if err != nil {
+		return ""
+	}
+	return choice
+}
+
+// promptForDefaultNamespaceLegacy is the original numeric-index prompt.
+// Kept verbatim so non-TTY tests + scripted use are unchanged.
+func promptForDefaultNamespaceLegacy(in io.Reader, out io.Writer, names []string) string {
 	fmt.Fprintln(out, "\nAvailable namespaces:")
 	for i, name := range names {
 		fmt.Fprintf(out, "  %d. %s\n", i+1, name)
@@ -270,7 +321,6 @@ func promptForDefaultNamespace(in io.Reader, out io.Writer, names []string) stri
 	if choice == "" {
 		return ""
 	}
-	// Accept either a 1-based index or the literal namespace name.
 	for i, name := range names {
 		if choice == name {
 			return name
@@ -283,9 +333,52 @@ func promptForDefaultNamespace(in io.Reader, out io.Writer, names []string) stri
 }
 
 // promptForServerURL asks the user which server to pair against and
-// returns the resolved URL. Default on empty input is the production
-// platform. Choice "3" (or any non-1/2) prompts for a custom URL.
+// returns the resolved URL. TTY callers get a styled huh.Select; on
+// "Other" they get a follow-up huh.Input. Non-TTY callers fall through
+// to the legacy numbered-menu prompt (which also accepts a pasted URL).
+// Default on empty input is the production platform.
 func promptForServerURL(in io.Reader, out io.Writer) (string, error) {
+	if !isTTY(out) {
+		return promptForServerURLLegacy(in, out)
+	}
+	const customSentinel = "__custom__"
+	var choice string
+	err := huh.NewSelect[string]().
+		Title("Pair against").
+		Options(
+			huh.NewOption("platform.rememberize.app  (production, recommended)", productionServerURL),
+			huh.NewOption("http://localhost:8080  (local dev)", localDevServerURL),
+			huh.NewOption("Other (enter URL)", customSentinel),
+		).
+		Value(&choice).
+		Run()
+	if err != nil {
+		return "", fmt.Errorf("server URL prompt: %w", err)
+	}
+	if choice != customSentinel {
+		return choice, nil
+	}
+	var custom string
+	err = huh.NewInput().
+		Title("Server URL").
+		Placeholder("https://your.rememberize.example").
+		Value(&custom).
+		Validate(func(s string) error {
+			if strings.TrimSpace(s) == "" {
+				return fmt.Errorf("server URL required")
+			}
+			return nil
+		}).
+		Run()
+	if err != nil {
+		return "", fmt.Errorf("custom server URL prompt: %w", err)
+	}
+	return strings.TrimSpace(custom), nil
+}
+
+// promptForServerURLLegacy is the original numbered-menu prompt. Kept
+// verbatim so non-TTY tests + scripted use are unchanged.
+func promptForServerURLLegacy(in io.Reader, out io.Writer) (string, error) {
 	fmt.Fprintln(out, "No server configured. Pair against:")
 	fmt.Fprintln(out, "  1. platform.rememberize.app  (production, recommended)")
 	fmt.Fprintln(out, "  2. http://localhost:8080      (local dev)")
@@ -316,8 +409,6 @@ func promptForServerURL(in io.Reader, out io.Writer) (string, error) {
 		}
 		return url, nil
 	default:
-		// Treat any other input as a pasted URL (common shortcut when the
-		// user has the URL on their clipboard and skips the menu).
 		if strings.Contains(choice, "://") {
 			return choice, nil
 		}
