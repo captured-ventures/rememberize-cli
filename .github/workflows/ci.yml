@@ -13,15 +13,22 @@ permissions:
 
 jobs:
   test:
+    # `os` is the stable label that drives the job name (and the names
+    # required by the main-branch ruleset). `runner` is the actual
+    # runs-on value, which can change without breaking the ruleset.
+    # Keep `os` literal even when migrating between runner providers.
     name: Test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-    runs-on: ${{ matrix.os }}
+        include:
+          - os: ubuntu-latest
+            runner: blacksmith-2vcpu-ubuntu-2404
+          - os: macos-latest
+            runner: macos-latest
+          - os: windows-latest
+            runner: blacksmith-4vcpu-windows-2025
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,7 +55,7 @@ jobs:
 
   mod-tidy:
     name: Mod Tidy Drift
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,7 +78,7 @@ jobs:
 
   goreleaser-check:
     name: GoReleaser Config
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -91,7 +98,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@v4
