@@ -68,7 +68,7 @@ func loadConfig() *Config {
 	path := configPath()
 	if _, err := os.Stat(path); err == nil {
 		if _, err := toml.DecodeFile(path, cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not parse config file: %v\n", err)
+			logger.Warn("could not parse config file", "path", path, "err", err)
 		}
 	}
 
