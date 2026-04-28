@@ -411,6 +411,174 @@ func TestPair_NamespacePromptSetsDefault(t *testing.T) {
 	_ = home
 }
 
+// ---------------------------------------------------------------------------
+// F24: preflight prompt before merging into an existing MCP config file
+// ---------------------------------------------------------------------------
+
+// withTempCwd chdirs to a fresh temp dir for the duration of the test
+// and restores the original cwd in cleanup. Returned path is the temp
+// dir so callers can seed files into it.
+func withTempCwd(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	oldWD, _ := os.Getwd()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+	return dir
+}
+
+func TestPair_F24_PromptsWhenMcpJsonExists(t *testing.T) {
+	withIsolatedHome(t)
+	resetPairState(t)
+	cwd := withTempCwd(t)
+
+	// Seed a tracked-style .mcp.json with a pre-existing entry the user
+	// would not want silently merged into.
+	preExisting := []byte(`{"mcpServers":{"foo":{"command":"foo-server"}}}`)
+	if err := os.WriteFile(filepath.Join(cwd, ".mcp.json"), preExisting, 0644); err != nil {
+		t.Fatalf("seed .mcp.json: %v", err)
+	}
+
+	server := stubExchangeServer(t, exchangeResponse{
+		APIKey:    "secret.key",
+		ServerURL: "https://example.test",
+		Connection: exchangeRespConnection{
+			Name:         "Claude Code (host)",
+			Type:         "mcp",
+			ConfigTarget: "claude-code",
+		},
+	}, nil)
+	defer server.Close()
+
+	var buf bytes.Buffer
+	pairServer = server.URL
+	pairStdin = strings.NewReader("n\n")
+	pairStdout = &buf
+
+	if err := runPair(pairCmd, []string{"CODE01"}); err != nil {
+		t.Fatalf("runPair: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Found existing") {
+		t.Errorf("stdout missing preflight prompt\ngot: %s", out)
+	}
+	if !strings.Contains(out, "Skipped") || !strings.Contains(out, "falling back to printable config") {
+		t.Errorf("stdout missing decline-fallback hint\ngot: %s", out)
+	}
+	if !strings.Contains(out, "paste this into your MCP client") {
+		t.Errorf("expected fallback to generic paste block on decline\ngot: %s", out)
+	}
+
+	// The seeded .mcp.json must be untouched.
+	got, err := os.ReadFile(filepath.Join(cwd, ".mcp.json"))
+	if err != nil {
+		t.Fatalf("read .mcp.json: %v", err)
+	}
+	if string(got) != string(preExisting) {
+		t.Errorf(".mcp.json was modified despite decline\nwant: %s\ngot:  %s", preExisting, got)
+	}
+}
+
+func TestPair_F24_AcceptsMergeOnYes(t *testing.T) {
+	withIsolatedHome(t)
+	resetPairState(t)
+	cwd := withTempCwd(t)
+
+	preExisting := []byte(`{"mcpServers":{"foo":{"command":"foo-server"}}}`)
+	if err := os.WriteFile(filepath.Join(cwd, ".mcp.json"), preExisting, 0644); err != nil {
+		t.Fatalf("seed .mcp.json: %v", err)
+	}
+
+	server := stubExchangeServer(t, exchangeResponse{
+		APIKey:    "secret.key",
+		ServerURL: "https://example.test",
+		Connection: exchangeRespConnection{
+			Name:         "Claude Code (host)",
+			Type:         "mcp",
+			ConfigTarget: "claude-code",
+		},
+	}, nil)
+	defer server.Close()
+
+	pairServer = server.URL
+	pairStdin = strings.NewReader("y\n")
+	pairStdout = io.Discard
+
+	if err := runPair(pairCmd, []string{"CODE01"}); err != nil {
+		t.Fatalf("runPair: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(cwd, ".mcp.json"))
+	if err != nil {
+		t.Fatalf("read .mcp.json: %v", err)
+	}
+	if !strings.Contains(string(got), "secret.key") {
+		t.Errorf(".mcp.json missing API key after accepted merge\ngot: %s", got)
+	}
+	// Existing entry must still be there.
+	if !strings.Contains(string(got), "foo-server") {
+		t.Errorf("existing foo entry was clobbered by merge\ngot: %s", got)
+	}
+}
+
+func TestPair_F24_NoPromptWhenFileMissing(t *testing.T) {
+	withIsolatedHome(t)
+	resetPairState(t)
+	withTempCwd(t)
+
+	server := stubExchangeServer(t, exchangeResponse{
+		APIKey:    "secret.key",
+		ServerURL: "https://example.test",
+		Connection: exchangeRespConnection{
+			Name:         "Claude Code (host)",
+			Type:         "mcp",
+			ConfigTarget: "claude-code",
+		},
+	}, nil)
+	defer server.Close()
+
+	var buf bytes.Buffer
+	pairServer = server.URL
+	pairStdin = strings.NewReader("") // no input — would block if prompt fired
+	pairStdout = &buf
+
+	if err := runPair(pairCmd, []string{"CODE01"}); err != nil {
+		t.Fatalf("runPair: %v", err)
+	}
+
+	if strings.Contains(buf.String(), "Found existing") {
+		t.Errorf("unexpected preflight prompt when no .mcp.json existed\ngot: %s", buf.String())
+	}
+}
+
+func TestPair_F24_DefaultYesOnEmptyInput(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"empty-defaults-yes", "\n", true},
+		{"y-yes", "y\n", true},
+		{"yes-yes", "yes\n", true},
+		{"Y-yes", "Y\n", true},
+		{"n-no", "n\n", false},
+		{"no-no", "no\n", false},
+		{"NO-no", "NO\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			got := confirmFileMerge(strings.NewReader(tc.input), &buf, ".mcp.json")
+			if got != tc.want {
+				t.Errorf("input %q: got %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPair_NamespacePromptSkipOnEmptyInput(t *testing.T) {
 	withIsolatedHome(t)
 	resetPairState(t)
