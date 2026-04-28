@@ -33,8 +33,7 @@
           { "context": "Test (windows-latest)" },
           { "context": "Mod Tidy Drift" },
           { "context": "GoReleaser Config" },
-          { "context": "Lint" },
-          { "context": "Analyze (go)" }
+          { "context": "Lint" }
         ]
       }
     }
