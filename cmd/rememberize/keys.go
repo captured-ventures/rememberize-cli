@@ -33,7 +33,10 @@ func init() {
 }
 
 func runKeysCreate(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 	name := args[0]
 
 	body := map[string]string{
@@ -75,7 +78,10 @@ var keysListCmd = &cobra.Command{
 }
 
 func runKeysList(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 
 	resp, _, err := client.do("GET", "/api/keys", nil)
 	if err != nil {
@@ -116,9 +122,12 @@ var keysRevokeCmd = &cobra.Command{
 }
 
 func runKeysRevoke(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 
-	_, _, err := client.do("DELETE", "/api/keys/"+args[0], nil)
+	_, _, err = client.do("DELETE", "/api/keys/"+args[0], nil)
 	if err != nil {
 		return err
 	}

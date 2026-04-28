@@ -28,7 +28,10 @@ func init() {
 }
 
 func runExport(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 
 	url := "/api/export?format=" + exportFormat
 	if exportNamespace != "" {

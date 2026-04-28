@@ -15,7 +15,10 @@ var getCmd = &cobra.Command{
 }
 
 func runGet(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 
 	mem, err := client.GetMemory(args[0])
 	if err != nil {

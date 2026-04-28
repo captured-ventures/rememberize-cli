@@ -14,7 +14,10 @@ var namespacesCmd = &cobra.Command{
 }
 
 func runNamespaces(cmd *cobra.Command, args []string) error {
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 
 	namespaces, err := client.ListNamespaces()
 	if err != nil {

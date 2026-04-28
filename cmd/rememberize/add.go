@@ -33,7 +33,10 @@ func init() {
 
 func runAdd(cmd *cobra.Command, args []string) error {
 	cfg := loadConfig()
-	client := NewClient()
+	client, err := NewClient()
+	if err != nil {
+		return err
+	}
 
 	var content string
 	if args[0] == "-" {
