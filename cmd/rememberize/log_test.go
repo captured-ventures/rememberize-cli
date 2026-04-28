@@ -14,14 +14,14 @@ import (
 // levels emit.
 func TestConfigureLogger_LevelMatrix(t *testing.T) {
 	cases := []struct {
-		name        string
-		verbose     int
-		quiet       bool
-		json        bool
-		wantDebug   bool
-		wantInfo    bool
-		wantWarn    bool
-		wantError   bool
+		name      string
+		verbose   int
+		quiet     bool
+		json      bool
+		wantDebug bool
+		wantInfo  bool
+		wantWarn  bool
+		wantError bool
 	}{
 		{name: "default", verbose: 0, wantWarn: true, wantError: true},
 		{name: "v1_info", verbose: 1, wantInfo: true, wantWarn: true, wantError: true},
