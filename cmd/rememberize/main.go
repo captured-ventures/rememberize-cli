@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
 
+	"github.com/charmbracelet/fang"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +17,7 @@ var version = "dev"
 var jsonOutput bool
 
 func main() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := fang.Execute(context.Background(), rootCmd, fang.WithVersion(version)); err != nil {
 		os.Exit(1)
 	}
 }
